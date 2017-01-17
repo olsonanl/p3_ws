@@ -22,6 +22,26 @@ RequestServer::RequestServer(boost::asio::io_service& io_service,
     
 }
 
+void RequestServer::register_path(const std::string &method,
+				  const std::string &path,
+				  request_callback_t cb)
+{
+    http_method_registry_[method].push_back(path_callback { path, cb });
+}
+
+void RequestServer::process_request(RequestPtr req)
+{
+    for (auto ent : http_method_registry_[req->request_type()])
+    {
+	// std::cerr << "compare '" << req->path() << "' '" << ent.path << "'\n";
+	if (req->path().compare(0, ent.path.length(), ent.path) == 0)
+	{
+	    ent.callback(req);
+	}
+    }
+}
+    
+
 /*
  * Need to split startup code from constructor due to use of enable_shared_from_this().
  */
@@ -46,7 +66,7 @@ void RequestServer::startup()
     acceptor_.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
     acceptor_.bind(endpoint);
     acceptor_.listen();
-    std::cout << "Listening on " << acceptor_.local_endpoint() << "\n";
+    std::cerr << "Listening on " << acceptor_.local_endpoint() << "\n";
     if (!port_file_.empty())
     {
 	std::ofstream out(port_file_);
@@ -61,22 +81,22 @@ void RequestServer::do_accept()
 {
     RequestPtr r = std::make_shared<Request>(shared_from_this(),
 							   io_service_);
-    std::cerr << "create " << r << " in do_accept\n";
+    // std::cerr << "create " << r << " in do_accept\n";
     acceptor_.async_accept(r->socket(),
 			   boost::bind(&RequestServer::on_accept, this,
 				       boost::asio::placeholders::error, r));
-    std::cerr << "leaving do_accept r use count=" << r.use_count() << "\n";
+    // std::cerr << "leaving do_accept r use count=" << r.use_count() << "\n";
 }
 
 void RequestServer::on_accept(boost::system::error_code ec, RequestPtr r)
 {
-    std::cerr << "on-accept use=" << r.use_count() << "\n";
+    // std::cerr << "on-accept use=" << r.use_count() << "\n";
     g_timer.start();
     // Check whether the server was stopped by a signal before this
     // completion handler had a chance to run.
     if (!acceptor_.is_open())
     {
-	std::cout << "not open\n";
+	std::cerr << "not open\n";
 	return;
     }
     
@@ -98,7 +118,7 @@ void RequestServer::do_await_stop()
     signals_.async_wait(
 	[this](boost::system::error_code ec, int signo)
 	{
-	    std::cout << "Exiting with signal " << signo << "\n";
+	    std::cerr << "Exiting with signal " << signo << "\n";
 	    acceptor_.close();
 	});
 }

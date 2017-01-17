@@ -10,10 +10,13 @@
  *
  */
 
+#include <string>
 #include <boost/asio.hpp>
 #include <set>
 #include <memory>
 #include "krequest.h"
+
+typedef std::shared_ptr<Request> RequestPtr;
 
 class RequestServer : public std::enable_shared_from_this<RequestServer>
 {
@@ -24,7 +27,18 @@ public:
 
     void startup();
 
-    typedef std::shared_ptr<Request> RequestPtr;
+    typedef std::function<void(RequestPtr req)> request_callback_t;
+    struct path_callback
+    {
+	std::string path;
+	request_callback_t callback;
+    };
+
+    void register_path(const std::string &method,
+		       const std::string &path,
+		       request_callback_t);
+
+    void process_request(RequestPtr req);
 
 private:
 
@@ -38,6 +52,8 @@ private:
     boost::asio::signal_set signals_;
     std::string port_;
     std::string port_file_;
+
+    std::map<std::string, std::vector<path_callback>> http_method_registry_;
 };
 
 

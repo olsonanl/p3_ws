@@ -39,16 +39,29 @@ public:
 	return parameters_;
     }
 
+    std::map<std::string, std::string> &headers()
+    {
+	return headers_;
+    }
+
     void write_header(std::ostream &os, int code, const std::string &status);
+
+    const std::string &request_type() { return request_type_; }
+    const std::string &path() { return path_; }
+
+    void read_body(std::function<void(boost::asio::streambuf &sb)> on_data,
+		   std::function<void()> on_complete);
+
+    void respond(int code, const std::string &status, const std::string &result,
+		 std::function<void()> on_done);
 
 private:
     void read_initial_line(boost::system::error_code err, size_t bytes);
     void read_headers(boost::system::error_code err, size_t bytes);
+    void on_data(boost::system::error_code err, size_t bytes, std::function<void(boost::asio::streambuf &sb)> on_data_cb,
+		   std::function<void()> on_complete_cb);
 
     void process_request();
-
-    void respond(int code, const std::string &status, const std::string &result,
-		 std::function<void()> on_done);
 
     std::shared_ptr<RequestServer> server_;
 
@@ -59,6 +72,8 @@ private:
     std::string http_version_;
     std::map<std::string, std::string> parameters_;
     std::map<std::string, std::string> headers_;
+
+    int content_length_;
 
     boost::asio::io_service &io_service_;
     boost::asio::ip::tcp::socket socket_;

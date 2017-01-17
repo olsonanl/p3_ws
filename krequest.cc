@@ -13,6 +13,7 @@
 
 #include "global.h"
 #include "debug.h"
+#include "kserver.h"
 
 const boost::regex request_regex("^([A-Z]+) ([^?#]*)(\\?([^#]*))?(#(.*))? HTTP/(\\d+\\.\\d+)");
 /* $1 = type
@@ -29,12 +30,12 @@ Request::Request(std::shared_ptr<RequestServer> server,
     socket_(io_service_),
     request_(65536)
 {
-    std::cerr << "construct krequest " << this << "\n";
+    // std::cerr << "construct krequest " << this << "\n";
 }
 
 Request::~Request()
 {
-    std::cerr << "destroy krequest " << this << "\n";
+    // std::cerr << "destroy krequest " << this << "\n";
 }
 			   
 /*
@@ -45,7 +46,7 @@ Request::~Request()
  */
 void Request::do_read()
 {
-    std::cerr << "do_read " << this << "\n";
+    // std::cerr << "do_read " << this << "\n";
     auto obj = shared_from_this();
     boost::asio::async_read_until(socket_, request_, "\n",
 				  [obj](boost::system::error_code err, size_t bytes_transferred)
@@ -241,7 +242,7 @@ void Request::read_headers(boost::system::error_code err, size_t bytes)
 
 void Request::process_request()
 {
-    std::cerr << "Process request type " << request_type_ << "\n";
+    // std::cerr << "Process request type " << request_type_ << "\n";
     
     /*
      * Process Expect: 100-continue
@@ -257,7 +258,7 @@ void Request::process_request()
 	boost::asio::write(socket_, s);
     }
 
-    respond(200, "OK", "OK\n", [this](){});
+    server_->process_request(shared_from_this());
 }
 
 void Request::write_header(std::ostream &os, int code, const std::string &status)
@@ -289,3 +290,76 @@ void Request::respond(int code, const std::string &status, const std::string &re
 			     });
 }
 
+
+void Request::read_body(std::function<void(boost::asio::streambuf &)> on_data_cb,
+			std::function<void()> on_complete_cb)
+{
+    auto x = headers_.find("content-length");
+    if (x == headers_.end())
+    {
+	respond(500, "Missing content length", "Missing content length header\n", [this](){ });
+	return;
+    }
+    
+    content_length_ = std::stoi(x->second);
+
+    /*
+     * If request_ has any data remaining after reading headers it, process.
+     * Otherwise submit an async read request.
+     */
+    if (request_.size() > 0)
+    {
+	boost::system::error_code err;
+	on_data(err, 0, on_data_cb, on_complete_cb);
+    }
+    else
+    {
+	auto obj = shared_from_this();
+	boost::asio::async_read(socket_, request_,
+				boost::asio::transfer_at_least(content_length_),
+				[obj, on_data_cb, on_complete_cb](boost::system::error_code err, size_t bytes)
+				{
+				    obj->on_data(err, bytes, on_data_cb, on_complete_cb);
+				});
+    }
+}
+
+void Request::on_data(boost::system::error_code err, size_t bytes,
+		      std::function<void(boost::asio::streambuf& )> on_data_cb,
+		      std::function<void()> on_complete_cb)
+{
+    if (!err || err == boost::asio::error::eof)
+    {
+ 	std::string r = make_string(request_);
+	std::cerr << "bytes=" << bytes << " content_length_=" << content_length_ << " err=" << err <<  "\n";
+//	std::cerr << "Read buffer contains: "  << r << std::endl;
+	
+	on_data_cb(request_);
+
+	content_length_ -= request_.size();
+
+	bool read_more = true;
+	if (err == boost::asio::error::eof || content_length_ == 0)
+	{
+	    std::cerr << "done\n";
+	    on_complete_cb();
+	    read_more = false;
+	}
+
+	request_.consume(request_.size());
+
+
+	if (read_more)
+	{
+	    auto obj = shared_from_this();
+	    boost::asio::async_read(socket_, request_,
+				    boost::asio::transfer_at_least(content_length_),
+				    [obj, on_data_cb, on_complete_cb](boost::system::error_code err, size_t bytes)
+				    {
+					obj->on_data(err, bytes, on_data_cb, on_complete_cb);
+				    });
+	}
+    }
+}
+
+    

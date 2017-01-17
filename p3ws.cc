@@ -11,6 +11,9 @@
 #include <unistd.h>
 
 #include "kserver.h"
+#include "jsonrpc_handler.h"
+#include "ws.h"
+#include "ws_client.h"
 
 #ifdef BLCR_SUPPORT
 #include "libcr.h"
@@ -26,6 +29,7 @@
 using namespace boost::filesystem;
 namespace po = boost::program_options;
 
+
 int main(int argc, char* argv[])
 {
     std::ostringstream x;
@@ -36,11 +40,17 @@ int main(int argc, char* argv[])
     std::string listen_port_file;
     bool daemonize;
     std::string pid_file;
+    std::string mongo_host;
+    int mongo_port;
+    std::string mongo_db;
     
     desc.add_options()
 	("help,h", "show this help message")
 	("listen-port-file", po::value<std::string>(&listen_port_file)->default_value("/dev/null"), "save the listen port to this file")
 	("listen-port,l", po::value<std::string>(&listen_port)->required(), "port to listen on. 0 means to choose a random port")
+	("mongo-host", po::value<std::string>(&mongo_host)->default_value("localhost"), "mongo hostname")
+	("mongo-port", po::value<int>(&mongo_port)->default_value(27017), "mongo port")
+	("mongo-database", po::value<std::string>(&mongo_db), "mongo dbname")
 	("debug-http", po::bool_switch(), "Debug HTTP protocol")
 	("daemonize", po::bool_switch(&daemonize), "Run the service in the background")
 	("pid-file", po::value<std::string>(&pid_file), "Write the process id to this file")
@@ -107,6 +117,22 @@ int main(int argc, char* argv[])
     boost::asio::io_service io_service;
 
     std::shared_ptr<RequestServer> kserver = std::make_shared<RequestServer>(io_service, listen_port, listen_port_file);
+
+    if (mongo_db.empty())
+    {
+	std::cerr << "No mongo db specified\n";
+	exit(0);
+    }
+
+    Workspace ws(mongo_host, mongo_port, mongo_db);
+    WorkspaceClient wsclient(ws);
+    JsonRpcHandler jhandler;
+    jhandler.register_module("Workspace", std::bind(&WorkspaceClient::handle_call, &wsclient, std::placeholders::_1, std::placeholders::_2));
+    kserver->register_path("POST", "/api", std::bind(&JsonRpcHandler::handle_request, &jhandler, std::placeholders::_1));
+    kserver->register_path("GET", "/quit", [&io_service](RequestPtr req) {
+	    std::cerr << "stopping on quit request\n";
+	    io_service.stop();
+	});
 
     kserver->startup();
 
