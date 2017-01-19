@@ -2,10 +2,12 @@
 #include <iostream>
 #include <tuple>
 #include <stdio.h>
+#include <thread>
 
 #include "curl_aio.h"
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
+#include <boost/thread/future.hpp>
 
 using namespace libcurl_wrapper;
 
@@ -23,14 +25,29 @@ CurlAIO::CurlAIO(boost::asio::io_service &io_service) :
     
 }
 
-void CurlAIO::request(const std::string &url, header_cb_t header_cb, data_cb_t data_cb)
+void CurlAIO::request(const std::string &url,
+		      std::function<void(std::shared_ptr<std::string> content)> cb)
+{
+    std::shared_ptr<std::string> accum = std::make_shared<std::string>();
+
+    auto data_cb = [accum](char *str, size_t len) {
+	accum->append(str, len);
+	
+    };
+    auto completion_cb = [accum, cb] () {
+	cb(accum);
+    };
+    request(url, 0, data_cb, completion_cb);
+}
+
+void CurlAIO::request(const std::string &url, header_cb_t header_cb, data_cb_t data_cb, complete_cb_t complete_cb)
 {
     CURL *curl = curl_easy_init();
 
     if (!curl)
 	throw std::runtime_error("curl_easy_init failed");
 
-    std::shared_ptr<RequestWrapper> rw = std::make_shared<RequestWrapper>(curl, *this, header_cb, data_cb);
+    std::shared_ptr<RequestWrapper> rw = std::make_shared<RequestWrapper>(curl, *this, header_cb, data_cb, complete_cb);
     
     curl_easy_setopt(curl, CURLOPT_VERBOSE, 0);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, rw.get());
@@ -70,25 +87,25 @@ int CurlAIO::socket_cb(CURL *easy, curl_socket_t socket, int what, void *userp, 
 {
     CurlAIO *aio = static_cast<CurlAIO *>(userp);
     
-    std::cerr << "socket_cb what=" << what << " socket=" << socket << "\n";
+    // std::cerr << "socket_cb what=" << what << " socket=" << socket << "\n";
 
     int *actionp = (int *) socketp;
 
     if (what == CURL_POLL_REMOVE)
     {
-	std::cerr << "  remove\n";
+	// std::cerr << "  remove\n";
 	aio->poll_remove_socket(actionp);
     }
     else
     {
 	if (actionp == 0)
 	{
-	    std::cerr << "  adding data\n";
+	    // std::cerr << "  adding data\n";
 	    aio->poll_add_socket(socket, easy, what);
 	}
 	else
 	{
-	    std::cerr << "  changing action action from " << *actionp << " to " << what << "\n";
+	    // std::cerr << "  changing action action from " << *actionp << " to " << what << "\n";
 	    aio->poll_set_socket(actionp, socket, easy, what, *actionp);
 	}
     }
@@ -115,7 +132,7 @@ void CurlAIO::poll_set_socket(int *fdp, curl_socket_t socket, CURL *easy,
     auto it = socket_map_.find(socket);
     if (it == socket_map_.end())
     {
-	std::cerr << "socket " << socket << " not one of ours\n";
+	// std::cerr << "socket " << socket << " not one of ours\n";
 	return;
     }
 
@@ -127,7 +144,7 @@ void CurlAIO::poll_set_socket(int *fdp, curl_socket_t socket, CURL *easy,
 
     if (action == CURL_POLL_IN)
     {
-	std::cerr << "  watch for readable\n";
+	// std::cerr << "  watch for readable\n";
 	if (old_action != CURL_POLL_IN && old_action != CURL_POLL_INOUT)
 	{
 	    tcp_socket->async_read_some(boost::asio::null_buffers(),
@@ -136,7 +153,7 @@ void CurlAIO::poll_set_socket(int *fdp, curl_socket_t socket, CURL *easy,
     }
     else if (action == CURL_POLL_OUT)
     {
-	std::cerr << "  watch for writable\n";
+	// std::cerr << "  watch for writable\n";
 	if (old_action != CURL_POLL_OUT && old_action != CURL_POLL_INOUT)
 	{
 	    tcp_socket->async_write_some(boost::asio::null_buffers(),
@@ -145,7 +162,7 @@ void CurlAIO::poll_set_socket(int *fdp, curl_socket_t socket, CURL *easy,
     }
     else if (action == CURL_POLL_INOUT)
     {
-	std::cerr << "  watch for readable and writable\n";
+	// std::cerr << "  watch for readable and writable\n";
 	if (old_action != CURL_POLL_IN && old_action != CURL_POLL_INOUT)
 	{
 	    tcp_socket->async_read_some(boost::asio::null_buffers(),
@@ -162,7 +179,7 @@ void CurlAIO::poll_set_socket(int *fdp, curl_socket_t socket, CURL *easy,
 
 void CurlAIO::timer_cb(const boost::system::error_code &error, CurlAIO *aio)
 {
-    std::cerr << "timer_cb error=" << error << "\n";
+    // std::cerr << "timer_cb error=" << error << "\n";
     if (!error)
     {
 	CURLMcode rc = curl_multi_socket_action(aio->curl_handle_, CURL_SOCKET_TIMEOUT,
@@ -198,8 +215,8 @@ void CurlAIO::event_cb(std::shared_ptr<boost::asio::ip::tcp::socket> tcp_socket,
 
 	if (still_running_ <= 0 && active_requests_.size() == 0)
 	{
-	    std::cerr << "still_running_=" << still_running_ << " active req count " << active_requests_.size() << "\n";
-	    std::cerr << "last transfer done, kill timeout\n";
+	    // std::cerr << "still_running_=" << still_running_ << " active req count " << active_requests_.size() << "\n";
+	    // std::cerr << "last transfer done, kill timeout\n";
 	    timer_.cancel();
 	    return;
 	}
@@ -226,7 +243,7 @@ void CurlAIO::event_cb(std::shared_ptr<boost::asio::ip::tcp::socket> tcp_socket,
 
 int CurlAIO::multi_timer_cb(CURLM *multi, long timeout_ms, CurlAIO *aio)
 {
-    std::cerr << "multi_timer_cb " << timeout_ms << "\n";
+    // std::cerr << "multi_timer_cb " << timeout_ms << "\n";
 
     aio->timer_.cancel();
     if (timeout_ms > 0)
@@ -251,7 +268,7 @@ void CurlAIO::check_multi_info()
     int msgs_left;
     while ((msg = curl_multi_info_read(curl_handle_, &msgs_left)))
     {
-	std::cerr << "got msg " << msg->msg << "\n";
+	// std::cerr << "got msg " << msg->msg << "\n";
 	if (msg->msg == CURLMSG_DONE)
 	{
 	    CURL *easy = msg->easy_handle;
@@ -262,19 +279,22 @@ void CurlAIO::check_multi_info()
 	    
 	    std::shared_ptr<RequestWrapper> rw = rw_raw->shared_from_this();
 	    
-	    std::cerr << "done: " << rw.use_count() << " " << eff_url << "\n";
+	    // std::cerr << "done: " << rw.use_count() << " " << eff_url << "\n";
+
+	    if (rw_raw->complete_cb_)
+		rw_raw->complete_cb_();
 
 	    curl_multi_remove_handle(curl_handle_, easy);
 	    auto it = active_requests_.find(rw);
 	    if (it != active_requests_.end())
 	    {
-		std::cerr << "removing from active\n";
+		// std::cerr << "removing from active\n";
 		active_requests_.erase(it);
-		dump_sockmap();
+		// dump_sockmap();
 	    }
 	    else
 	    {
-		std::cerr << "cannot find request!\n";
+		// std::cerr << "cannot find request!\n";
 	    }
 	    curl_easy_cleanup(easy);
 	}
@@ -287,13 +307,13 @@ curl_socket_t CurlAIO::open_socket_cb(void *clientp,
 {
     CurlAIO *aio = static_cast<CurlAIO *>(clientp);
 
-    std::cerr << "open socket cb\n";
+    // std::cerr << "open socket cb\n";
 
     curl_socket_t sockfd = CURL_SOCKET_BAD;
 
     if (purpose == CURLSOCKTYPE_IPCXN && address->family == AF_INET)
     {
-	std::cerr << "create ipv4 socket\n";
+	// std::cerr << "create ipv4 socket\n";
 
 	auto tcp_socket = std::make_shared<boost::asio::ip::tcp::socket>(aio->io_service());
 	boost::system::error_code ec;
@@ -305,7 +325,7 @@ curl_socket_t CurlAIO::open_socket_cb(void *clientp,
 	else
 	{
 	    sockfd = tcp_socket->native_handle();
-	    std::cerr << "opened socket " << sockfd << "\n";
+	    // std::cerr << "opened socket " << sockfd << "\n";
 	    aio->monitor_socket(sockfd, tcp_socket);
 	}
     }
@@ -317,18 +337,19 @@ curl_socket_t CurlAIO::open_socket_cb(void *clientp,
 int CurlAIO::close_socket_cb(void *clientp, curl_socket_t item)
 {
     CurlAIO *aio = static_cast<CurlAIO *>(clientp);
-    std::cerr << "close socket cb\n";
+    // std::cerr << "close socket cb\n";
 
     aio->unmonitor_socket(item);
 
     return 0;
 }
 
-RequestWrapper::RequestWrapper(CURL *curl, CurlAIO &aio, header_cb_t header_cb, data_cb_t data_cb) :
+RequestWrapper::RequestWrapper(CURL *curl, CurlAIO &aio, header_cb_t header_cb, data_cb_t data_cb, complete_cb_t complete_cb) :
     curl_(curl),
     aio_(aio),
     header_cb_(header_cb),
-    data_cb_(data_cb)
+    data_cb_(data_cb),
+    complete_cb_(complete_cb)
 {
     
 }
@@ -354,33 +375,38 @@ size_t RequestWrapper::write_cb(char *ptr, size_t size, size_t nmemb, RequestWra
 size_t RequestWrapper::header_cb(char *ptr, size_t size, size_t nmemb, RequestWrapper *rw_raw)
 {
     // std::cerr << "header data " << " " << size << " " << nmemb << "\n";
-    std::string s(ptr, size * nmemb);
 
-    size_t pos = 0;
-    while (pos != std::string::npos)
+    if (rw_raw->header_cb_)
     {
-	size_t eol = s.find('\n', pos);
-	std::string line;
-	if (eol == std::string::npos)
+	std::string s(ptr, size * nmemb);
+	
+	size_t pos = 0;
+	while (pos != std::string::npos)
 	{
-	    line = s.substr(pos);
-	    pos = eol;
-	}
-	else
-	{
-	    line = s.substr(pos, eol - pos - 1);
-	    pos = eol + 1;
-	}
-	size_t dot = line.find(':');
-	if (dot != std::string::npos)
-	{
-	    std::string hdr = line.substr(0, dot);
-	    dot++;
-	    while (std::isspace(line[dot]))
+	    size_t eol = s.find('\n', pos);
+	    std::string line;
+	    if (eol == std::string::npos)
+	    {
+		line = s.substr(pos);
+		pos = eol;
+	    }
+	    else
+	    {
+		line = s.substr(pos, eol - pos - 1);
+		pos = eol + 1;
+	    }
+	    size_t dot = line.find(':');
+	    if (dot != std::string::npos)
+	    {
+		std::string hdr = line.substr(0, dot);
 		dot++;
-	    std::string value = line.substr(dot);
-	    rw_raw->header_cb_(hdr, value);
-	    // std::cerr << "hdr='" << hdr << "' value='" << value << "'\n";
+		while (std::isspace(line[dot]))
+		    dot++;
+		std::string value = line.substr(dot);
+
+		rw_raw->header_cb_(hdr, value);
+		// std::cerr << "hdr='" << hdr << "' value='" << value << "'\n";
+	    }
 	}
     }
 
@@ -395,6 +421,9 @@ int main()
     
     CurlAIO c(io_service);
 
+//    boost::asio::io_service::work work(io_service);
+
+#if 0
     for (int i = 0; i < 5; i++)
     {
 	auto hcb =[i](const std::string &hdr, const std::string &value) {
@@ -403,16 +432,23 @@ int main()
 	auto dcb = [i](char *data, size_t length) {
 	    std::cerr << i << " data " << length << "\n";
 	};
+	auto ccb = [i]() {
+	    std::cerr << i << " done\n"; 
+	};
 
-	c.request("http://bioseed.mcs.anl.gov/~olson/vir-human.2014-0414.tgz", hcb, 0);
-	c.request("http://bioseed.mcs.anl.gov/~olson/test.txt", hcb, 0);
-	c.request("http://bioseed.mcs.anl.gov/~olson/pseed.update-2012-0218.tgz", hcb, 0);
+	c.request("http://bioseed.mcs.anl.gov/~olson/vir-human.2014-0414.tgz", hcb, 0, ccb);
+	c.request("http://bioseed.mcs.anl.gov/~olson/test.txt", hcb, 0, ccb);
+	c.request("http://bioseed.mcs.anl.gov/~olson/pseed.update-2012-0218.tgz", hcb, 0, ccb);
     }
+#endif
 
+    c.request("http://bioseed.mcs.anl.gov/~olson/", [](std::shared_ptr<std::string> str) {
+	    std::cerr << "done! len=" << str->length() << "\n";
+	    std::cerr << "refcnt " << str.use_count() << "\n";
+	});
     io_service.run();
 
     std::cerr << "run returns\n";
-    c.dump_sockmap();
     
     return 0;
 }

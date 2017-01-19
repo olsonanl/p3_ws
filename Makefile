@@ -124,6 +124,9 @@ curl_aio.o: curl_aio.h
 curl_aio: curl_aio.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS) -lcurl
 
+daytime: daytime.o
+	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS) -lcurl
+
 clean:
 	rm -f *.o p3ws
 

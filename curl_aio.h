@@ -18,15 +18,18 @@ namespace libcurl_wrapper
 class CurlAIO;
 typedef std::function<void(const std::string &hdr, const std::string &value)> header_cb_t;
 typedef std::function<void(char *data, size_t length)> data_cb_t;
+typedef std::function<void()> complete_cb_t;
 
 class RequestWrapper : public std::enable_shared_from_this<RequestWrapper>
 {
 public:
     friend class CurlAIO;
 
-    RequestWrapper(CURL *curl, CurlAIO &aio, header_cb_t, data_cb_t);
+    RequestWrapper(CURL *curl, CurlAIO &aio, header_cb_t, data_cb_t, complete_cb_t);
 
-    ~RequestWrapper() { std::cerr << "Destroy RW \n"; }
+    ~RequestWrapper() {
+	// std::cerr << "Destroy RW \n";
+    }
 
     CurlAIO &aio() { return aio_; }
     
@@ -39,6 +42,7 @@ private:
 
     header_cb_t header_cb_;
     data_cb_t data_cb_;
+    complete_cb_t complete_cb_;
 
     static size_t write_cb(char *ptr, size_t size, size_t nmemb, RequestWrapper *rw_raw);
     static size_t header_cb(char *ptr, size_t size, size_t nmemb, RequestWrapper *rw_raw);
@@ -50,7 +54,8 @@ class CurlAIO
 public:
     CurlAIO(boost::asio::io_service &io_service);
 
-    void request(const std::string &url, header_cb_t header_cb, data_cb_t data_cb);
+    void request(const std::string &url, header_cb_t header_cb, data_cb_t data_cb, complete_cb_t complete_cb);
+    void request(const std::string &url, std::function<void(std::shared_ptr<std::string> content)>);
 
     void monitor_socket(curl_socket_t sock, std::shared_ptr<boost::asio::ip::tcp::socket> sobj) {
 	socket_map_[sock] = sobj;
