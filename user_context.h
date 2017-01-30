@@ -1,5 +1,4 @@
-#ifndef _USER_CONTEXT_H
-#define _USER_CONTEXT_H
+#pragma once
 
 /*
  * A user context defines the important per-user information;
@@ -10,11 +9,24 @@
  * We initialize a user context with an authorization token.
  */
 
+#include "auth_token.h"
+#include "ws_path.h"
+#include <iostream>
+#include <boost/filesystem.hpp>
+
+
 class UserContext
 {
 public:
-    UserContext(const std::string &token);
-}
+    UserContext(const AuthToken &tok);
+
+    friend std::ostream &operator<<(std::ostream &out, UserContext &uc);
+
+    std::string username() { return user_token_.username(); }
+    WsPath user_home();
+
+private:
+    AuthToken user_token_;
+};
 
 
-#endif /*  _USER_CONTEXT_H */

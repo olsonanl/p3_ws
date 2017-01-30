@@ -134,5 +134,4 @@ json JsonRpcHandler::invoke(const std::string &module, const std::string &call, 
 	json retval = handler(call, params);
 	return retval;
     }
-    
 }

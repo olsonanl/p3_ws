@@ -9,6 +9,7 @@ json WorkspaceClient::handle_call(const std::string &call, const json &params)
 {
     std::cerr << "Workspace handling call to " << call << ": " << params << "\n";
 
+/*
     if (call == "ls")
     {
 	return ws_.ls(list_params(params[0]));
@@ -17,4 +18,6 @@ json WorkspaceClient::handle_call(const std::string &call, const json &params)
     {
 	return "null"_json;
     }
+*/
+	return "null"_json;
 }

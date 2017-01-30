@@ -24,7 +24,7 @@ default: p3ws
 BUILD_DEBUG = 1
 
 ifeq ($(BUILD_DEBUG),1)
-OPT = -g
+OPT = -g -Wall
 
 # OPT = -g -DBOOST_ASIO_ENABLE_HANDLER_TRACKING
 
@@ -93,7 +93,14 @@ endif
 
 JSON_CFLAGS = -I../json/src
 
-CXXFLAGS = $(STDCPP) $(INC) $(OPT) $(PROFILER_INC) $(BLCR_CFLAGS) $(TBB_CFLAGS) $(NUMA_CFLAGS) $(JSON_CFLAGS) $(MONGOCXX_CFLAGS)
+OPENSSL_FLAGS = -I/opt/local/include
+OPENSSL_LIBS = -lssl -lcrypto
+
+CURL_LIBS = -lcurl 
+
+BOOST_CFLAGS = -DBOOST_FILESYSTEM_NO_DEPRECATED
+
+CXXFLAGS = $(STDCPP) $(INC) $(OPT) $(PROFILER_INC) $(BLCR_CFLAGS) $(TBB_CFLAGS) $(NUMA_CFLAGS) $(JSON_CFLAGS) $(MONGOCXX_CFLAGS) $(OPENSSL_FLAGS) $(BOOST_CFLAGS)
 CFLAGS = $(INC) $(OPT) $(PROFILER_INC) 
 
 # LDFLAGS  = -static
@@ -112,20 +119,20 @@ LIBS = $(BOOST)/lib/libboost_system.a \
 	$(PROFILER_LIB) \
 	$(BLCR_LIB) \
 	$(TBB_LIB) \
-	$(NUMA_LIBS)
+	$(NUMA_LIBS) \
+	$(CURL_LIBS) \
+	$(OPENSSL_LIBS)
 
-p3ws: p3ws.o kserver.o krequest.o jsonrpc_handler.o ws.o ws_client.o auth_token.o
+p3ws: p3ws.o kserver.o krequest.o jsonrpc_handler.o ws.o ws_client.o auth_token.o user_context.o \
+		ws_path.o auth_mgr.o curl_aio.o ws_item.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
-auth_token:  auth_token.o
+auth_token:  auth_token.o auth_mgr.o curl_aio.o user_context.o ws_path.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
 curl_aio.o: curl_aio.h
 curl_aio: curl_aio.o
-	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS) -lcurl
-
-daytime: daytime.o
-	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS) -lcurl
+	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
 clean:
 	rm -f *.o p3ws
@@ -135,9 +142,15 @@ depend:
 
 # DO NOT DELETE
 
+auth_mgr.o: auth_mgr.h curl_aio.h auth_token.h
+auth_token.o: auth_token.h auth_mgr.h curl_aio.h user_context.h ws_path.h
+curl_aio.o: curl_aio.h
 jsonrpc_handler.o: jsonrpc_handler.h kserver.h krequest.h
 krequest.o: krequest.h global.h debug.h kserver.h
 kserver.o: kserver.h krequest.h global.h
-p3ws.o: kserver.h krequest.h jsonrpc_handler.h ws.h ws_client.h global.h
-ws.o: ws.h ws_client.h
-ws_client.o: ws_client.h ws.h
+p3ws.o: kserver.h krequest.h jsonrpc_handler.h ws.h ws_client.h ws_path.h
+p3ws.o: ws_item.h user_context.h auth_token.h curl_aio.h auth_mgr.h global.h
+user_context.o: user_context.h auth_token.h ws_path.h
+ws.o: ws.h ws_client.h ws_path.h ws_item.h user_context.h auth_token.h
+ws_client.o: ws_client.h ws.h ws_path.h ws_item.h user_context.h auth_token.h
+ws_path.o: ws_path.h

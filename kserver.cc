@@ -15,9 +15,9 @@ RequestServer::RequestServer(boost::asio::io_service& io_service,
     ) :
     io_service_(io_service),
     acceptor_(io_service_),
+    signals_(io_service_),
     port_(port),
-    port_file_(port_file),
-    signals_(io_service_)
+    port_file_(port_file)
 {
     
 }

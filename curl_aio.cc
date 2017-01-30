@@ -11,6 +11,11 @@
 
 using namespace libcurl_wrapper;
 
+void CurlAIO::global_init()
+{
+    curl_global_init(CURL_GLOBAL_ALL);
+}
+	
 CurlAIO::CurlAIO(boost::asio::io_service &io_service) :
     io_service_(io_service),
     timer_(io_service),
@@ -23,6 +28,11 @@ CurlAIO::CurlAIO(boost::asio::io_service &io_service) :
     curl_multi_setopt(curl_handle_, CURLMOPT_TIMERFUNCTION, multi_timer_cb);
     curl_multi_setopt(curl_handle_, CURLMOPT_TIMERDATA, this);
     
+}
+
+CurlAIO::~CurlAIO()
+{
+    curl_multi_cleanup(curl_handle_);
 }
 
 void CurlAIO::request(const std::string &url,
@@ -38,6 +48,25 @@ void CurlAIO::request(const std::string &url,
 	cb(accum);
     };
     request(url, 0, data_cb, completion_cb);
+}
+
+/*
+ * Synchronous request that runs the aio event loop.
+ */
+std::string CurlAIO::request(const std::string &url)
+{
+    std::shared_ptr<std::string> result;
+    bool ready = false;
+    request(url, [this, &result, &ready](std::shared_ptr<std::string> x) {
+	    result = x;
+	    ready = true;
+	});
+    while (!ready)
+    {
+	io_service().run();
+	io_service().reset();
+    }
+    return *result;
 }
 
 void CurlAIO::request(const std::string &url, header_cb_t header_cb, data_cb_t data_cb, complete_cb_t complete_cb)
@@ -413,9 +442,11 @@ size_t RequestWrapper::header_cb(char *ptr, size_t size, size_t nmemb, RequestWr
     return size * nmemb;
 }
 
+#ifdef CURL_AIO_MAIN
+
 int main()
 {
-    curl_global_init(CURL_GLOBAL_ALL);
+    CurlAIO::global_init();
 
     boost::asio::io_service io_service;
     
@@ -453,3 +484,4 @@ int main()
     return 0;
 }
 
+#endif
