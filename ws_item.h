@@ -25,6 +25,8 @@ public:
     friend std::ostream &operator<<(std::ostream &out, WsItem &item);
     friend class WsItemIterator;
 
+    void fill_data();
+
     /* Accessors defined by the P3 workspace specification. */
     std::string name() const { return view_["name"].get_utf8().value.to_string(); }
     std::string type() const { return type_override_.empty() ? view_["type"].get_utf8().value.to_string() : type_override_; }
@@ -32,12 +34,32 @@ public:
     std::string creation_time() const { return view_["creation_date"].get_utf8().value.to_string(); }
     std::string object_id() const { return view_["uuid"].get_utf8().value.to_string(); }
     std::string object_owner() const { return view_["owner"].get_utf8().value.to_string(); }
+    std::string shocknode() const { return view_["shocknode"].get_utf8().value.to_string(); }
+    bool shock() const {
+	auto v = view_["shock"];
+	switch (v.type()) {
+	case bsoncxx::type::k_bool:
+	    return v.get_bool();
+	case bsoncxx::type::k_int32:
+	    return v.get_int32();
+	case bsoncxx::type::k_int64:
+	    return v.get_int64();
+	case bsoncxx::type::k_undefined:
+	    return false;
+	case bsoncxx::type::k_utf8:
+	    return !v.get_utf8().value.to_string().empty();
+	default:
+	    return false;
+	}
+    }	    
 
 private:
     WsPath path_;
     bsoncxx::document::view_or_value view_or_value_;
     bsoncxx::document::view view_;
     std::string type_override_;
+
+    std::string data_;
 };
 
 

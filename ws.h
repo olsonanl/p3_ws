@@ -20,8 +20,13 @@ public:
 
     WsItemSet query_workspaces(UserContext &ctx);
 
-    boost::optional<WsItem> query_object(UserContext &ctx, const WsPath &path);
+    boost::optional<WsItem> query_object(UserContext &ctx, const WsPath &path, bool metadata_only);
     boost::optional<std::string> lookup_workspace_id(UserContext &ctx, const WsPath &path);
+
+    /*
+     * Routines that map to the API
+     */
+    WsItemIterator get(std::vector<WsPath> objects, bool metadata_only, bool adminmode);
 
 
 private:

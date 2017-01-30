@@ -31,6 +31,12 @@ WsPath::WsPath(const std::string &p)
 	path_.pop_back();
     }
 
+    if (path_.size())
+    {
+	name_ = path_.back();
+	path_.pop_back();
+    }
+
     std::cerr << "user: " << user_ << "\n";
     std::cerr << "ws: " << workspace_ << "\n";
 
@@ -38,6 +44,7 @@ WsPath::WsPath(const std::string &p)
     {
 	std::cerr << "'" << x << "'\n";
     }
+    std::cerr << "name: '" << name_ << "'\n";
 }
 
 WsPath::WsPath(WsPath &p) :

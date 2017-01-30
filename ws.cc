@@ -114,7 +114,7 @@ boost::optional<std::string> Workspace::lookup_workspace_id(UserContext &ctx, co
     return uuid;
 }
 
-boost::optional<WsItem> Workspace::query_object(UserContext &ctx, const WsPath &path)
+boost::optional<WsItem> Workspace::query_object(UserContext &ctx, const WsPath &path, bool metadata_only)
 {
     auto coll = db_["objects"];
 
@@ -124,28 +124,42 @@ boost::optional<WsItem> Workspace::query_object(UserContext &ctx, const WsPath &
 	return boost::none;
     }
 
-//    auto q = document{};
     auto val = document{} << "path" << path.delimited_path()
-		 << "$or" 
-		 << open_array
-		 << open_document << "owner" << ctx.username() << close_document
-		 << open_document << "global_permission" << open_document << "$ne" << "n" << close_document << close_document
-		 << close_array
-		 << finalize;
+			  << "name" << path.name() 
+			  << "$or" 
+			  << open_array
+			  << open_document << "owner" << ctx.username() << close_document
+			  << open_document << "global_permission" << open_document << "$ne" << "n" << close_document << close_document
+			  << close_array
+			  << finalize;
 
-    //    std::cerr << "query doc: " << bsoncxx::to_json(val) << "\n";
+    std::cerr << "query doc: " << bsoncxx::to_json(val) << "\n";
     mongocxx::stdx::optional<bsoncxx::document::value> res = coll.find_one(val.view());
     if (res)
     {
-	boost::optional<WsItem> o(WsItem(std::move(*res)));
-	std::cerr << "got opt " << *o << "\n";
-	return o;
+	boost::optional<WsItem> item(WsItem(std::move(*res)));
+
+	if (!metadata_only)
+	{
+	    /*
+	     * TODO fill in file data from filesystem or shock node.
+	     */
+	    item->fill_data();
+	}
+	return item;
     }
     else
     {
 	return boost::none;
     }
 }
+
+WsItemIterator Workspace::get(std::vector<WsPath> objects, bool metadata_only, bool adminmode)
+{
+    
+}
+
+
 
 /*
 json Workspace::ls(const list_params &params)

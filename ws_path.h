@@ -33,9 +33,11 @@ public:
     const std::string &workspace () const { return workspace_; }
 
     std::string delimited_path() const { return boost::join(path_, "/"); }
+    const std::string &name()  const { return name_; }
 
 private:
     std::string user_;
     std::string workspace_;
     std::deque<std::string> path_;
+    std::string name_;
 };

@@ -123,9 +123,14 @@ LIBS = $(BOOST)/lib/libboost_system.a \
 	$(CURL_LIBS) \
 	$(OPENSSL_LIBS)
 
-p3ws: p3ws.o kserver.o krequest.o jsonrpc_handler.o ws.o ws_client.o auth_token.o user_context.o \
+p3ws: p3ws.o kserver.o krequest.o jsonrpc_handler.o ws.o auth_token.o user_context.o \
 		ws_path.o auth_mgr.o curl_aio.o ws_item.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
+
+tests: $(patsubst %.cc,%,$(wildcard tests/*.cc))
+
+tests/%: tests/%.cc ws_path.o
+	$(CXX) -I. $(CXXFLAGS) $(LDFLAGS) -o $@ $^
 
 auth_token:  auth_token.o auth_mgr.o curl_aio.o user_context.o ws_path.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
@@ -153,4 +158,5 @@ p3ws.o: ws_item.h user_context.h auth_token.h curl_aio.h auth_mgr.h global.h
 user_context.o: user_context.h auth_token.h ws_path.h
 ws.o: ws.h ws_client.h ws_path.h ws_item.h user_context.h auth_token.h
 ws_client.o: ws_client.h ws.h ws_path.h ws_item.h user_context.h auth_token.h
+ws_item.o: ws_item.h ws_path.h
 ws_path.o: ws_path.h

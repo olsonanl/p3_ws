@@ -138,12 +138,18 @@ int main(int argc, char* argv[])
     AuthToken at(auth_mgr.create_token(tstring));
     UserContext uc(at);
 
-    auto itemx = ws.query_object(uc, WsPath("/olson/olson/x/y"));
-    if (itemx)
+    if (auto itemx = ws.query_object(uc, WsPath("/olson/olson/x/y"), false))
     {
 	WsItem &ent = itemx.get();
 	std::cerr << "Found item: " <<  ent.name() << " " << ent.path() << " " << ent.object_owner() << " '" << ent.creation_time() << "' " << ent.type() << " " << ent.object_id() << "\n";
     }
+    if (auto itemx = ws.query_object(uc, WsPath("/olson/olson/mf4"), false))
+    {
+	WsItem &ent = itemx.get();
+	std::cerr << "Found item: " <<  ent.name() << " " << ent.path() << " " << ent.object_owner() << " '" << ent.creation_time() << "' " << ent.type() << " " << ent.object_id() << "\n";
+    }
+    else
+	std::cerr << "didn't find mf4\n";
 
     auto res = ws.query_workspaces(uc);
     for (auto ent: res)
@@ -151,16 +157,18 @@ int main(int argc, char* argv[])
 	std::cerr << ent.name() << " " << ent.path() << " " << ent.object_owner() << " '" << ent.creation_time() << "' " << ent.type() << " " << ent.object_id() << "\n";
     }
 
-    WorkspaceClient wsclient(ws);
-    JsonRpcHandler jhandler;
-    jhandler.register_module("Workspace", std::bind(&WorkspaceClient::handle_call, &wsclient, std::placeholders::_1, std::placeholders::_2));
-    kserver->register_path("POST", "/api", std::bind(&JsonRpcHandler::handle_request, &jhandler, std::placeholders::_1));
-    kserver->register_path("GET", "/quit", [&io_service](RequestPtr req) {
-	    std::cerr << "stopping on quit request\n";
-	    io_service.stop();
-	});
-
-    kserver->startup();
+    /*
+      WorkspaceClient wsclient(ws);
+      JsonRpcHandler jhandler;
+      jhandler.register_module("Workspace", std::bind(&WorkspaceClient::handle_call, &wsclient, std::placeholders::_1, std::placeholders::_2));
+      kserver->register_path("POST", "/api", std::bind(&JsonRpcHandler::handle_request, &jhandler, std::placeholders::_1));
+      kserver->register_path("GET", "/quit", [&io_service](RequestPtr req) {
+      std::cerr << "stopping on quit request\n";
+      io_service.stop();
+      });
+      
+      kserver->startup();
+    */
 
 
     #ifdef GPROFILER

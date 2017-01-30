@@ -1,0 +1,2 @@
+tests:
+	cd ..; make tests

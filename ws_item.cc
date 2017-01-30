@@ -38,12 +38,21 @@ WsItem::WsItem(bsoncxx::document::view_or_value vv, const std::string &type_over
 }
 
 WsItem::WsItem(WsItem &&other) :
-    path_(other.path_),
+    path_(std::move(other.path_)),
     view_or_value_(std::move(other.view_or_value_)),
     view_(view_or_value_.view()),
     type_override_(other.type_override_)
 {
-    std::cerr << "move construct\n";
+}
+
+void WsItem::fill_data()
+{
+    std::cerr << "fill data shock=" << shock() << " for " << *this << "\n";
+    if (shock())
+    {
+	data_ = shocknode();
+	std::cerr << "Go shock node '" << data_ << "'\n";
+    }
 }
 
 std::ostream &operator<<(std::ostream &out, WsItem &item)
