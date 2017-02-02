@@ -27,6 +27,7 @@ public:
 
 private:
     AuthToken user_token_;
+    bool is_admin_;
 };
 
 

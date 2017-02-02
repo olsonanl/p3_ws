@@ -123,14 +123,17 @@ LIBS = $(BOOST)/lib/libboost_system.a \
 	$(CURL_LIBS) \
 	$(OPENSSL_LIBS)
 
+OBJS = kserver.o krequest.o jsonrpc_handler.o ws.o auth_token.o user_context.o \
+                ws_path.o auth_mgr.o curl_aio.o ws_item.o global.o
+
 p3ws: p3ws.o kserver.o krequest.o jsonrpc_handler.o ws.o auth_token.o user_context.o \
 		ws_path.o auth_mgr.o curl_aio.o ws_item.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
 tests: $(patsubst %.cc,%,$(wildcard tests/*.cc))
 
-tests/%: tests/%.cc ws_path.o
-	$(CXX) -I. $(CXXFLAGS) $(LDFLAGS) -o $@ $^
+tests/%: tests/%.cc $(OBJS)
+	$(CXX) -I. $(CXXFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 auth_token:  auth_token.o auth_mgr.o curl_aio.o user_context.o ws_path.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
@@ -150,6 +153,7 @@ depend:
 auth_mgr.o: auth_mgr.h curl_aio.h auth_token.h
 auth_token.o: auth_token.h auth_mgr.h curl_aio.h user_context.h ws_path.h
 curl_aio.o: curl_aio.h
+global.o: global.h
 jsonrpc_handler.o: jsonrpc_handler.h kserver.h krequest.h
 krequest.o: krequest.h global.h debug.h kserver.h
 kserver.o: kserver.h krequest.h global.h

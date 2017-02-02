@@ -121,6 +121,7 @@ boost::optional<WsItem> Workspace::query_object(UserContext &ctx, const WsPath &
     auto ws_id = lookup_workspace_id(ctx, path);
     if (!ws_id)
     {
+	std::cerr << "No ws found for " << ctx <<  " " << path << "\n";
 	return boost::none;
     }
 
@@ -129,7 +130,6 @@ boost::optional<WsItem> Workspace::query_object(UserContext &ctx, const WsPath &
 			  << "$or" 
 			  << open_array
 			  << open_document << "owner" << ctx.username() << close_document
-			  << open_document << "global_permission" << open_document << "$ne" << "n" << close_document << close_document
 			  << close_array
 			  << finalize;
 
@@ -137,6 +137,7 @@ boost::optional<WsItem> Workspace::query_object(UserContext &ctx, const WsPath &
     mongocxx::stdx::optional<bsoncxx::document::value> res = coll.find_one(val.view());
     if (res)
     {
+	std::cerr << "return: " << bsoncxx::to_json(*res) << "\n";
 	boost::optional<WsItem> item(WsItem(std::move(*res)));
 
 	if (!metadata_only)
@@ -154,9 +155,27 @@ boost::optional<WsItem> Workspace::query_object(UserContext &ctx, const WsPath &
     }
 }
 
-WsItemIterator Workspace::get(std::vector<WsPath> objects, bool metadata_only, bool adminmode)
+/*
+ * End-user API routine.
+ *
+ * Here we need to make multiple requestss because the object list may
+ * have multiple workspaces each of which need to have permissions lookups
+ * done. This can likely be optimized in future if it is a performance
+ * bottleneck to make the multiple requests to mongo to retrieve the data,
+ * but I suspect typical usage has a small number of objects in the list.
+ */
+std::vector<WsItem> Workspace::get(UserContext &ctx, std::vector<WsPath> objects, bool adminmode)
 {
-    
+    std::vector<WsItem> rval;
+    for (auto path: objects)
+    {
+	boost::optional<WsItem> res = query_object(ctx, path, adminmode);
+	if (res)
+	{
+	    rval.push_back(std::move(*res));
+	}
+    }
+    return rval;
 }
 
 

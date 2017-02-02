@@ -26,7 +26,7 @@ public:
     /*
      * Routines that map to the API
      */
-    WsItemIterator get(std::vector<WsPath> objects, bool metadata_only, bool adminmode);
+    std::vector<WsItem> get(UserContext &ctx, std::vector<WsPath> objects, bool adminmode);
 
 
 private:

@@ -91,7 +91,7 @@ void RequestServer::do_accept()
 void RequestServer::on_accept(boost::system::error_code ec, RequestPtr r)
 {
     // std::cerr << "on-accept use=" << r.use_count() << "\n";
-    g_timer.start();
+    //g_timer.start();
     // Check whether the server was stopped by a signal before this
     // completion handler had a chance to run.
     if (!acceptor_.is_open())
