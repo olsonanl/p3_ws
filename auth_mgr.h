@@ -12,6 +12,8 @@ class AuthMgr
 {
 public:
     AuthMgr(libcurl_wrapper::CurlAIO &curl_aio, const std::string &cache_dir);
+    AuthMgr(AuthMgr &other) : curl_aio_(other.curl_aio_), cache_directory_(other.cache_directory_) {}
+	
     ~AuthMgr();
 
     AuthToken create_token(const std::string &txt);

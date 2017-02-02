@@ -58,6 +58,7 @@ bool AuthMgr::validate(AuthToken &token)
     std::string signing_subject(token.get_component("SigningSubject"));
 
     std::string pub = pubkey_for_signing_subject(signing_subject);
+    // std::cerr << "got pubkey " << pub << "\n";
 
     /*
      * Use OpenSSL to compute hashes and verify signature.
@@ -67,11 +68,24 @@ bool AuthMgr::validate(AuthToken &token)
     BIO *bio = BIO_new(BIO_s_mem());
     if (BIO_write(bio, pub.c_str(), pub.length()) <= 0)
 	throw std::runtime_error("BIO_puts failed");
-	
-    EVP_PKEY* evp_key = PEM_read_bio_PUBKEY(bio, NULL, NULL, NULL);
-    RSA* rsa = EVP_PKEY_get1_RSA(evp_key);
 
-    //RSA *rsa = PEM_read_bio_RSAPublicKey(bio, 0, 0, 0);
+    RSA *rsa;
+    EVP_PKEY* evp_key = 0;
+    if (pub.find("BEGIN PUBLIC KEY") != std::string::npos)
+    {
+	evp_key = PEM_read_bio_PUBKEY(bio, NULL, NULL, NULL);
+	rsa = EVP_PKEY_get1_RSA(evp_key);
+
+    }
+    else if (pub.find("BEGIN RSA PUBLIC KEY") != std::string::npos)
+    {
+	rsa = PEM_read_bio_RSAPublicKey(bio, 0, 0, 0);
+    }
+    else
+    {
+	throw std::runtime_error("Unknown signing key type in token");
+    }
+	
     if (!rsa)
 	throw std::runtime_error("Error reading public key into RSA");
     
@@ -80,7 +94,8 @@ bool AuthMgr::validate(AuthToken &token)
 
     BIO_free(bio);
     RSA_free(rsa);
-    EVP_PKEY_free(evp_key);
+    if (evp_key)
+	EVP_PKEY_free(evp_key);
     return rc;
 }
 
